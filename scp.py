@@ -13,4 +13,4 @@ sp = np.abs(fft.rfft(ws))  # многомерный, делает всё как 
 freq = np.fft.rfftfreq(ws.shape[1], 1./fr)  # список частот в разложении Фурье
 i1 = (freq * (freq <= 900)).argmax()
 i2 = (freq * (freq >= 900) + 10000 * (freq < 900)).argmin()
-filt = 
+filt = np.sum(sp[:, i1:i2+1], axis=0)  # или axis=1, я запутался
