@@ -9,6 +9,9 @@ let ts = timesync.create({
     server: '/timesync',
     interval: 10000
 });
+let deviceOffset = 0;
+let __oldNow = ts.now;
+ts.now = () => __oldNow() + deviceOffset;
 
 let blinkCard = $('#blink-card');
 let syncBtn = $('#btn-sync');
@@ -28,8 +31,12 @@ setInterval(() => {
 syncBtn.on('click', () => sock.emit('schedule-init'));
 sock.on('schedule', data => {
     console.log('SCHEDULE', data);
-    if (data.leader) record(data.duration).then(chunks => console.log(chunks));
+    if (data.leader) record(data.duration).then(chunks => sendRecord(chunks, data));
     beep(data.timestamp - ts.now());
+});
+sock.on('sync-correction', data => {
+    deviceOffset += data.offset;
+    console.log('SET DEVICE CORRECTION:', deviceOffset);
 });
 
 // Audio sync
@@ -43,7 +50,7 @@ function beep(offset) {
     osc.frequency.value = 900;
     osc.connect(context.destination);
     osc.start(context.currentTime + offset);
-    osc.stop(context.currentTime + offset + 0.1);
+    osc.stop(context.currentTime + offset + 0.02);
     osc.onended = () => osc.disconnect(context.destination);
 }
 
@@ -57,9 +64,20 @@ function record(duration) {
             mediaRecorder.addEventListener("dataavailable", event => audioChunks.push(event.data));
             setTimeout(() => {
                 mediaRecorder.stop();
-                resolve(audioChunks);
+                stream.getTracks().forEach(track => track.stop());
+                setTimeout(() => resolve(audioChunks), 500);
             }, duration);
             return audioChunks;
         });
     });
+}
+
+function sendRecord(chunks, data) {
+    console.log('FEEDBACK');
+    let fileReader = new FileReader();
+    fileReader.onload = event => sock.emit('sync-feedback', {
+        blob: event.target.result,
+        nodes: data.nodes
+    });
+    fileReader.readAsArrayBuffer(chunks[0]);
 }

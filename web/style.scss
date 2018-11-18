@@ -41,6 +41,7 @@ body {
 }
 
 .cover-container {
+  min-width: 350px;
   max-width: 42em;
 }
 
@@ -96,15 +97,6 @@ body {
 .nav-masthead .active {
   color: #fff;
   border-bottom-color: #fff;
-}
-
-@media (min-width: 48em) {
-  .masthead-brand {
-    float: left;
-  }
-  .nav-masthead {
-    float: right;
-  }
 }
 
 // Cover
