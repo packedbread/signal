@@ -1,4 +1,5 @@
 from tempfile import NamedTemporaryFile
+from scipy.signal import savgol_filter
 from skimage import util as skutil
 from scipy.io import wavfile
 from bisect import bisect
@@ -14,7 +15,7 @@ import os
 WINSIZE = 1024
 WINSTEP = 100
 FREQUENCY = 900
-SMOOTHWINDOW = 10
+SMOOTHWINDOW = 11
 THRESHOLD = 0.4
 
 # READ
@@ -52,6 +53,7 @@ freqs = np.fft.fftfreq(WINSIZE)[:WINSIZE // 2] * rate
 index = bisect(freqs, FREQUENCY)
 volume = spectrum[index, :]
 volume = volume / np.max(spectrum)
+volume = savgol_filter(volume, SMOOTHWINDOW, 3)
 
 # EXTRACT BEEPS
 filtered = volume > THRESHOLD
