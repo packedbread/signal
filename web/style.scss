@@ -49,14 +49,6 @@ body {
   @extend .btn, .btn-block, .btn-outline-light;
 }
 
-#btn-sync {
-  @extend .btn-default;
-}
-
-#btn-offset {
-  @extend .btn-default, .disabled;
-}
-
 #blink-card {
   @extend .card, .bg-white, .border-light;
   margin-bottom: 0.5rem;

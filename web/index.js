@@ -1,13 +1,14 @@
-import * as timesync from "timesync";
-import * as io from "socket.io-client";
-import $ from "jquery";
+let timesync = require('timesync');
+let io = require('socket.io-client');
+let $ = require('jquery');
+let toto = require('./toto.mp3');
 // import popper from "popper.js";
 // import bootstrap from "bootstrap";
 
 let sock = io.connect();
 let ts = timesync.create({
     server: '/timesync',
-    interval: 10000
+    interval: 5000
 });
 let deviceOffset = 0;
 let __oldNow = ts.now;
@@ -16,23 +17,46 @@ ts.now = () => __oldNow() + deviceOffset;
 let blinkCard = $('#blink-card');
 let syncBtn = $('#btn-sync');
 let offsetSpan = $('#btn-offset span');
+let playBtn = $('#btn-play');
 
 // Get notified on changes in the offset
 ts.on('change', offset => offsetSpan.text(offset.toFixed(1) + ' ms'));
 
 // Blink
+let blinkPeriod = 652;
 let lastTime = 0;
 setInterval(() => {
-    if (ts.now() % 500 < lastTime) blinkCard.toggleClass('off');
-    lastTime = ts.now() % 500;
+    if (ts.now() % blinkPeriod < lastTime) {
+        if (ts.now() % (blinkPeriod * 2) < blinkPeriod) {
+            blinkCard.removeClass('off');
+        } else {
+            blinkCard.addClass('off');
+        }
+    }
+    lastTime = ts.now() % blinkPeriod;
 }, 50);
 
 // Init sync
-syncBtn.on('click', () => sock.emit('schedule-init'));
+syncBtn.on('click', () => {
+    if (playerState) playBtn.click();
+    syncBtn.addClass('disabled');
+    playBtn.addClass('disabled');
+    sock.emit('schedule-init');
+});
 sock.on('schedule', data => {
     console.log('SCHEDULE', data);
     if (data.leader) record(data.duration).then(chunks => sendRecord(chunks, data));
-    beep(data.timestamp - ts.now());
+    if (playerState) playBtn.click();
+    syncBtn.addClass('disabled');
+    syncBtn.text('Syncing...');
+    playBtn.addClass('disabled');
+    let offset = data.timestamp - ts.now();
+    beep(offset);
+    setTimeout(() => {
+        syncBtn.removeClass('disabled');
+        syncBtn.text('Sync all');
+        playBtn.removeClass('disabled');
+    }, offset + 1000);
 });
 sock.on('sync-correction', data => {
     deviceOffset += data.offset;
@@ -81,3 +105,55 @@ function sendRecord(chunks, data) {
     });
     fileReader.readAsArrayBuffer(chunks[0]);
 }
+
+// Player
+let startOffset = 0 / 1000;
+let playerState = false;
+let buffer = null;
+let duration = null;
+let index = 0;
+let nodes = [];
+
+let gain = context.createGain();
+gain.gain.value = 0;
+gain.connect(context.destination);
+
+let xhr = new XMLHttpRequest();
+xhr.open('GET', toto, true);
+xhr.responseType = 'arraybuffer';
+xhr.onload = () => {
+    context.decodeAudioData(xhr.response, buff => {
+        buffer = buff;
+        duration = Math.round((buffer.duration - startOffset) * 1000);
+        for (let i = 0; i < 2; i++) {
+            nodes[i] = context.createBufferSource();
+            nodes[i].buffer = buffer;
+            nodes[i].connect(gain);
+        }
+        let currentOffset = (ts.now() % duration) / 1000;
+        nodes[1].start(0, startOffset + currentOffset);
+        nodes[1].onended = () => setTimeout(playCycle, 500);
+        playCycle();
+    });
+};
+xhr.send();
+
+function playCycle() {
+    nodes[index] = context.createBufferSource();
+    nodes[index].buffer = buffer;
+    nodes[index].connect(gain);
+
+    let nextOffset = (duration - ts.now() % duration) / 1000;
+    console.log('Next start in:', nextOffset);
+    let nextStart = nextOffset + context.currentTime;
+    nodes[index].start(nextStart, startOffset);
+    nodes[index].onended = () => setTimeout(playCycle, 500);
+
+    index = +!index;
+}
+
+playBtn.on('click', () => {
+    playerState = !playerState;
+    playBtn.text(playerState ? 'Stop' : 'Play');
+    gain.gain.value = +playerState;
+});
